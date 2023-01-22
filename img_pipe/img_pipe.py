@@ -1076,7 +1076,7 @@ class freeCoG:
 
         return vert_inds, nearest_verts
 
-    def label_elecs(self, elecfile_prefix='TDT_elecs_all', atlas_surf='desikan-killiany', atlas_depth='destrieux', elecs_all=True):
+    def label_elecs(self, elecfile_prefix='TDT_elecs_all', atlas_surf='desikan-killiany', atlas_depth='destrieux', elecs_all=True,all_depth=False,quietmode=False):
         ''' Automatically labels electrodes based on the freesurfer annotation file.
         Assumes TDT_elecs_all.mat or clinical_elecs_all.mat files
         Uses both the Desikan-Killiany Atlas and the Destrieux Atlas, as described 
@@ -1115,7 +1115,11 @@ class freeCoG:
          
         # This version of mri_annotation2label uses the coarse labels from the Desikan-Killiany Atlas, unless
         # atlas_surf is 'destrieux', in which case the more detailed labels are used
-        os.system('mri_annotation2label --subject %s --hemi %s --surface pial %s --outdir %s'%(self.subj, self.hem, surf_atlas_flag, gyri_labels_dir))
+        if self.hem in ['lh','rh']:
+            os.system('mri_annotation2label --subject %s --hemi %s --surface pial %s --outdir %s'%(self.subj, self.hem, surf_atlas_flag, gyri_labels_dir))
+        else: # it's stereo
+            for h in ['lh', 'rh']:
+                os.system('mri_annotation2label --subject %s --hemi %s --surface pial %s --outdir %s'%(self.subj, h, surf_atlas_flag, gyri_labels_dir))
         print('Loading electrode matrix')
         elecfile = os.path.join(self.elecs_dir, elecfile_prefix+'.mat')
         elecmatrix = scipy.io.loadmat(elecfile)['elecmatrix']
@@ -1130,11 +1134,15 @@ class freeCoG:
             short_label = []
             long_label = []
             grid_or_depth = []
- 
+
             for r in elecmontage:
                 short_label.append(r[0][0]) # This is the shortened electrode montage label
-                long_label.append(r[1][0]) # This is the long form electrode montage label
-                grid_or_depth.append(r[2][0]) # This is the label for grid, depth, or strip
+                if all_depth: # added by AG
+                    long_label.append(r[0][0]) 
+                    grid_or_depth.append('depth') 
+                else:                    
+                    long_label.append(r[1][0]) # This is the long form electrode montage label
+                    grid_or_depth.append(r[2][0]) # This is the label for grid, depth, or strip
             
             # These are the indices that won't be used for labeling
             #dont_label = ['EOG','ECG','ROC','LOC','EEG','EKG','NaN','EMG','scalpEEG']
@@ -1179,8 +1187,13 @@ class freeCoG:
                 vert_label[np.int(v)] = label_name.strip()
             fid.close()
 
-        trivert_file = os.path.join(self.mesh_dir, '%s_pial_trivert.mat'%(self.hem))
-        cortex_verts = scipy.io.loadmat(trivert_file)['vert']
+        if self.hem in ['lh','rh']:
+            trivert_file = os.path.join(self.mesh_dir, '%s_pial_trivert.mat'%(self.hem))
+            cortex_verts = scipy.io.loadmat(trivert_file)['vert']
+        else: # it's stereo
+            for h in ['lh', 'rh']:
+                trivert_file = os.path.join(self.mesh_dir, '%s_pial_trivert.mat' % h)
+                cortex_verts = scipy.io.loadmat(trivert_file)['vert']
 
         # Only use electrodes that are grid or strips
         if len(isnotdepth)>0:
@@ -1270,9 +1283,10 @@ class freeCoG:
 
             for elec in np.arange(nchans):
                 anatomy[elec] = lab[aparc_dat[VoxCRS[elec,0], VoxCRS[elec,1], VoxCRS[elec,2]]]
-                print("E%d, Vox CRS: [%d, %d, %d], Label #%d = %s"%(elec, VoxCRS[elec,0], VoxCRS[elec,1], VoxCRS[elec,2], 
-                                                                    aparc_dat[VoxCRS[elec,0], VoxCRS[elec,1], VoxCRS[elec,2]], 
-                                                                    anatomy[elec]))
+                if not quietmode:
+                    print("E%d, Vox CRS: [%d, %d, %d], Label #%d = %s"%(elec, VoxCRS[elec,0], VoxCRS[elec,1], VoxCRS[elec,2], 
+                                                                        aparc_dat[VoxCRS[elec,0], VoxCRS[elec,1], VoxCRS[elec,2]], 
+                                                                        anatomy[elec]))
 
             elec_labels[np.invert(isnotdepth),3] = anatomy
             
